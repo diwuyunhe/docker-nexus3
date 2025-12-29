@@ -40,14 +40,40 @@ jobs:
                     username: ${{ secrets.DOCKERHUB_USERNAME }}
                     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            -   name: Extract tag name
+            -   name: Determine Docker tag
                 id: get_tag
                 run: |
-                    TAG=${GITHUB_REF#refs/tags/}
+                    EVENT_NAME="${{ github.event_name }}"
+                    REF="${{ github.ref }}"
+                    SHA_SHORT="${GITHUB_SHA::8}"
+                    
+                    if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+                      CUSTOM_TAG="${{ github.event.inputs.docker_tag }}"
+                      if [[ -n "$CUSTOM_TAG" ]]; then
+                        TAG="$CUSTOM_TAG"
+                      else
+                        TAG="manual-$SHA_SHORT"
+                      fi
+                    elif [[ "$REF" == refs/tags/* ]]; then
+                      TAG="${REF#refs/tags/}"
+                    elif [[ "$REF" == refs/heads/* ]]; then
+                      BRANCH="${REF#refs/heads/}"
+                      BRANCH_CLEAN="${BRANCH//\//-}"
+                      BRANCH_CLEAN="${BRANCH_CLEAN,,}"
+                      TAG="${BRANCH_CLEAN}-${SHA_SHORT}"
+                    else
+                      TAG="unknown-$SHA_SHORT"
+                    fi
+                    
+                    if [[ ! "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+                      echo "Error: Invalid characters in tag: $TAG"
+                      exit 1
+                    fi
+                    
+                    echo "Computed Docker tag: $TAG"
                     echo "TAG=${TAG}" >> $GITHUB_ENV
-                    echo "Using Docker tag: ${TAG}"
 
-            -   name: Build and push multi-platform image
+            -   name: Build and push
                 uses: docker/build-push-action@v6
                 with:
                     context: .
@@ -56,6 +82,5 @@ jobs:
                     push: true
                     tags: |
                         ${{ env.DOCKER_IMAGE }}:${{ env.TAG }}
-                        # ${{ env.DOCKER_IMAGE }}:latest
                     cache-from: type=gha
                     cache-to: type=gha,mode=max
