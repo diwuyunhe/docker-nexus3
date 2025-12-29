@@ -9,7 +9,7 @@ on:
             docker_tag:
                 description: 'Docker image tag (e.g. 3.63.0-01)'
                 required: true
-                default: 'test-latest'
+                default: '3.63.0-01'
             platforms:
                 description: 'Build platforms (comma-separated)'
                 required: false
